@@ -2,16 +2,11 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.html",
-      "use": "@vercel/static"
-    },
-    {
-      "glob": "releases/*",
+      "src": "**",
       "use": "@vercel/static"
     }
   ],
   "routes": [
-    { "handle": "filesystem" },
     {
       "src": "/releases/(.*)",
       "dest": "/releases/$1"
