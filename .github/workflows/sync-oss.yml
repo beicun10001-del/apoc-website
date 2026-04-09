@@ -1,0 +1,68 @@
+name: Sync to Aliyun OSS
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download Release Assets
+        run: |
+          mkdir -p assets
+          # Download Windows exe
+          curl -L -o assets/Apoc-Setup.exe \
+            "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/$(basename ${{ github.event.release.tarball_url }})" || true
+          # Try common Windows exe names
+          for name in "Apoc-Setup-5.4.2.exe" "Apoc-Setup.exe" "Apoc-Setup-${{ github.event.release.tag_name }}.exe"; do
+            url="${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/$name"
+            if curl -s -I "$url" | grep -q "200"; then
+              curl -L -o "assets/$name" "$url"
+              echo "Downloaded $name"
+              break
+            fi
+          done
+          # Try common macOS dmg names
+          for name in "Apoc.AI.Assistant-5.2.6.dmg" "Apoc.AI.Assistant.dmg" "Apoc-${{ github.event.release.tag_name }}.dmg"; do
+            url="${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/$name"
+            if curl -s -I "$url" | grep -q "200"; then
+              curl -L -o "assets/$name" "$url"
+              echo "Downloaded $name"
+            fi
+          done
+          ls -la assets/
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: Install OSS SDK
+        run: pip install oss2
+      
+      - name: Upload to Aliyun OSS
+        env:
+          ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+        run: |
+          python << EOF
+          import oss2
+          import os
+          import glob
+          
+          auth = oss2.Auth(os.environ['ACCESS_KEY_ID'], os.environ['ACCESS_KEY_SECRET'])
+          bucket = oss2.Bucket(auth, 'oss-cn-shenzhen.aliyuncs.com', 'harvey-apoc')
+          
+          # Upload all files in assets folder
+          for file in glob.glob('assets/*'):
+              filename = os.path.basename(file)
+              print(f'Uploading {filename}...')
+              bucket.put_object_from_file(filename, file)
+              print(f'{filename} uploaded successfully!')
+          
+          print('All files uploaded to Aliyun OSS!')
+          EOF
